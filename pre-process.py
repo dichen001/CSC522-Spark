@@ -11,7 +11,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, 'test.txt')
+FILE0 = os.path.join(baseDir, '1000test.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
