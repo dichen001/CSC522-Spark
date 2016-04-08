@@ -27,6 +27,9 @@ sys.path.append("/Users/Jack/Projects/spark-1.6.1/python/lib/py4j-0.9-src.zip")
 try:
     from pyspark import SparkContext
     from pyspark import SparkConf
+    from pyspark.mllib.feature import PCA
+    from pyspark.mllib.linalg import Vectors
+    from pyspark.sql import SQLContext
     print ("Successfully imported Spark Modules")
 
 except ImportError as e:
@@ -175,13 +178,11 @@ def uniform_tfidf_rep(words, total_copurs):
     return uniform_rep
 
 
-
-
-
-if __name__ =='__main__':
+# Creates and returns a tfidf rdd from FILE0
+def create_tfidf(sc):
     start = time.time()
 
-    sc = SparkContext('local')
+
     docs = sc.textFile(FILE0, 4).map(split_docs)
     tags = docs.map(lambda doc: doc[1].split())
     words = docs.map(lambda doc: doc[0].split())
@@ -204,32 +205,39 @@ if __name__ =='__main__':
     tfidf_RDD_broadcast =  sc.broadcast(tfidf_RDD.collectAsMap())
     tfidf_matrix = tfidf_RDD.map(lambda row: uniform_tfidf_rep(row[1], unique_words_broadcast.value))
 
-    tfidf_norm = tfidf_RDD.map(lambda (k, v): (k, norm(v)))
-    tfidf_norm_broadcast = sc.broadcast(tfidf_norm.collectAsMap())
+    return tfidf_matrix
+
+    # tfidf_norm = tfidf_RDD.map(lambda (k, v): (k, norm(v)))
+    # tfidf_norm_broadcast = sc.broadcast(tfidf_norm.collectAsMap())
+    #
+    #
+    # '''
+    # The A.cartesian(B) will be an RDD of the form:
+    # [(A ID1, A String1), (A ID2, A String2), ...]  and  [(B ID1, B String1), (B ID2, B String2), ...]
+    # to:
+    # [ ((A ID1, A String1), (B ID1, B String1)), ((A ID1, A String1), (B ID2, B String2)), ((A URL2, A String2), (B ID1, B String1)), ... ]¶
+    # '''
+    # cross_RDD = ID_tokens.cartesian(ID_tokens).cache()
+    # # commonTokens:  [[id1, id2], [tokens]]
+    # commonTokens = cross_RDD.map(get_common)
+    # similarities_RDD = commonTokens.map(fastCosineSimilarity).cache()
+    #
+    # end = time.time()
+    # print 'total prepare: '+ str(end - start)
+    # print similarities_RDD.count()
+    # c_time = time.time()
+    # print 'count time: ' + str(c_time - end)
+    # similarities_RDD.collect()
+    # c2_time = time.time()
+    # print 'count time: ' + str(c2_time - c_time)
+    # print 'Successfully Calculated the similarities between all the posts'
 
 
-    '''
-    The A.cartesian(B) will be an RDD of the form:
-    [(A ID1, A String1), (A ID2, A String2), ...]  and  [(B ID1, B String1), (B ID2, B String2), ...]
-    to:
-    [ ((A ID1, A String1), (B ID1, B String1)), ((A ID1, A String1), (B ID2, B String2)), ((A URL2, A String2), (B ID1, B String1)), ... ]¶
-    '''
-    cross_RDD = ID_tokens.cartesian(ID_tokens).cache()
-    # commonTokens:  [[id1, id2], [tokens]]
-    commonTokens = cross_RDD.map(get_common)
-    similarities_RDD = commonTokens.map(fastCosineSimilarity).cache()
-
-    end = time.time()
-    print 'total prepare: '+ str(end - start)
-    print similarities_RDD.count()
-    c_time = time.time()
-    print 'count time: ' + str(c_time - end)
-    similarities_RDD.collect()
-    c2_time = time.time()
-    print 'count time: ' + str(c2_time - c_time)
-    print 'Successfully Calculated the similarities between all the posts'
-
-
-
+if __name__ == '__main__':
+    sc = SparkContext('local')
+    tfidf_matrix = create_tfidf(sc)
+    tfidf_dVector_matrix = tfidf_matrix.map(lambda row: Vectors.dense(row))
+    reduc = PCA(3).fit(tfidf_dVector_matrix)
+    after_pca = reduc.transform(tfidf_dVector_matrix)
 
 
