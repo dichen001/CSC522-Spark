@@ -11,7 +11,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, 'trunkx0.txt')
+FILE0 = os.path.join(baseDir, 'test.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -161,6 +161,18 @@ def fastCosineSimilarity(record):
     key = (ID0, ID1)
     return (key, value)
 
+def uniform_tfidf_rep(words, total_copurs):
+    """ transform the tfidf dict of a post to an uniform tfidf representation for all the posts.
+    :param  words: dict {word: tfidf} for each word in one post
+            total_copurs: the unique words for all the posts.
+    :return: a uniform representation of a list of tfidf values for this post.
+            (dimension is the total unique words counts for all the posts)
+    """
+    uniform_rep = [0]*len(total_copurs)
+    for word, tfidf in words.iteritems():
+        uniform_id = total_copurs.index(word)
+        uniform_rep[uniform_id] = tfidf
+    return uniform_rep
 
 
 
@@ -174,6 +186,8 @@ if __name__ =='__main__':
     tags = docs.map(lambda doc: doc[1].split())
     words = docs.map(lambda doc: doc[0].split())
     words = words.map(preProcess).cache()
+    unique_words = words.flatMap(lambda x: x).distinct().collect()
+    unique_words_broadcast = sc.broadcast(unique_words)
     # use zipWithIndex() to append unique ID for each document
     ID_tokens = words.zipWithIndex().map(swapOder)
     token_ID_pairs = ID_tokens.flatMap(invert).cache()
@@ -186,8 +200,10 @@ if __name__ =='__main__':
     idf_weight_broadcast = sc.broadcast(idfWeight)
 
     # get the whole tfidf RDD and norm(tfidf)
-    tfidf_RDD = ID_tokens.map(lambda (ID, tokens): (ID, tfidf(tokens, idf_weight_broadcast.value)))
+    tfidf_RDD = ID_tokens.map(lambda (ID, tokens): (ID, tfidf(tokens, idf_weight_broadcast.value))).cache()
     tfidf_RDD_broadcast =  sc.broadcast(tfidf_RDD.collectAsMap())
+    tfidf_matrix = tfidf_RDD.map(lambda row: uniform_tfidf_rep(row[1], unique_words_broadcast.value))
+
     tfidf_norm = tfidf_RDD.map(lambda (k, v): (k, norm(v)))
     tfidf_norm_broadcast = sc.broadcast(tfidf_norm.collectAsMap())
 
