@@ -11,7 +11,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, '1000test.txt')
+FILE0 = os.path.join(baseDir, 'xaa')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -239,5 +239,4 @@ if __name__ == '__main__':
     tfidf_dVector_matrix = tfidf_matrix.map(lambda row: Vectors.dense(row))
     reduc = PCA(3).fit(tfidf_dVector_matrix)
     after_pca = reduc.transform(tfidf_dVector_matrix)
-
 
