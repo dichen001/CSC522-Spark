@@ -149,7 +149,7 @@ if __name__ == '__main__':
     tfidf = create_tfidf(sc)
     reduced = reduce_tfidf(tfidf, 1000)
     # comment next line out, if you want to save. (note: change the path accordingly)
-    reduced.saveAsPickleFile('./data/10k_reducedRDD')
+    # reduced.saveAsPickleFile('./data/10k_reducedRDD')
 
     before_pca = reduced.map(lambda x: Vectors.dense(x))
     before_pca.cache()
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     # haven't found a way to save PCAModel, so you need to train by yourself if you need it.
     processed = model.transform(reduced)
     # comment next line out, if you want to save. (note: change the path accordingly)
-    processed.saveAsPickleFile('./data/10k_processedRDD')
+    # processed.saveAsPickleFile('./data/10k_processedRDD')
     print 'total posts: ' + str(processed.count())
 
 
