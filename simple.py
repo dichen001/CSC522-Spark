@@ -2,9 +2,11 @@
 import os
 import sys
 import time
+import pickle
 import operator
 import numpy as np
 from nltk.corpus import stopwords
+from sklearn.externals import joblib
 from nltk.stem.lancaster import LancasterStemmer
 from helpers import *
 
@@ -13,7 +15,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, 'xac')
+FILE0 = os.path.join(baseDir, '10k_posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -143,8 +145,12 @@ if __name__ == '__main__':
     conf.set("spark.driver.maxResultSize", "16g")
     sc = SparkContext(conf=conf)
 
+    ## ****  you can jump this part. directly load data in the next part ****** ##
     tfidf = create_tfidf(sc)
     reduced = reduce_tfidf(tfidf, 1000)
+    # comment next line out, if you want to save. (note: change the path accordingly)
+    reduced.saveAsPickleFile('./data/10k_reducedRDD')
+
     before_pca = reduced.map(lambda x: Vectors.dense(x))
     before_pca.cache()
 
@@ -154,5 +160,15 @@ if __name__ == '__main__':
     end = time.time()
     print 'time for PCA: ' + str(end - start)
 
-    transformed = model.transform(reduced)
-    print 'total posts: ' + str(transformed.count())
+    # haven't found a way to save PCAModel, so you need to train by yourself if you need it.
+    processed = model.transform(reduced)
+    # comment next line out, if you want to save. (note: change the path accordingly)
+    processed.saveAsPickleFile('./data/10k_processedRDD')
+    print 'total posts: ' + str(processed.count())
+
+
+    ## ****  you can directly load data for testing, just comment out the following lines, and change the path accordingly****** ##
+    # reduced = sc.pickleFile('./data/10k_reduced_RDD')
+    # processed = sc.pickleFile('./data/10k_processedRDD')
+
+
