@@ -203,6 +203,12 @@ def judge(true, predict):
         return 1
     return 0
 
+def convert2tag_id_pairs(id, tags):
+    pairs = []
+    for tag in tags:
+        pairs.append([tag, id])
+    return pairs
+
 def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     vec_id = vectors.zipWithIndex()
     tag_id = tags.zipWithIndex()
@@ -220,14 +226,31 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     # ranked_matrix = dit_matrix.map(lambda x: )
     tag_id_broadcast = sc.broadcast(tag_id.collect())
     selection = int(K_percent * tag_id.count())
-    #p = get_tag(dit_matrix.first()[1], tag_id_broadcast.value,top=selection)
     predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=selection, KeepAllTag = KeepAllTag)))
+    predict_TagIdPairs = predict.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
+    predict_tag_IDs = predict_TagIdPairs.flatMap(lambda x: x)\
+                                        .map(lambda x: (x[0], [x[1]]))\
+                                        .reduceByKey(lambda x,y: x+y)
+    top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
+                                        .sortByKey(ascending=False)\
+                                        .map(lambda x: (x[1][0],x[0],x[1][1]))\
+                                        .take(10)
     actual = test_data.map(lambda x: (x[1], x[0]))
+    actual_TagIdPairs = actual.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
+    actual_tag_IDs = actual_TagIdPairs.flatMap(lambda x: x)\
+                                        .map(lambda x: (x[0], [x[1]]))\
+                                        .reduceByKey(lambda x,y: x+y)
+    top_actual_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
+                                        .sortByKey(ascending=False)\
+                                        .map(lambda x: (x[1][0],x[0],x[1][1]))\
+                                        .take(50)
+    #confution_matrix =
+
     evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
     correct = evaluate.map(lambda x: x[1]).reduce(lambda x,y: x+y)
     test_size = test_data.count()
     overall_accuracy = float(correct)/test_size
-    print "parameter:\t" + str(K_percent) + '\t' + str(KeepAllTag) + "test size:\t" + str(test_size) +"\tcorrect prediction:\t" + str(correct) + "\toverall accuracy:\t" + str(overall_accuracy)
+    print "parameter:\t" + str(K_percent) + '\t' + str(KeepAllTag) + ",\ttest size:\t" + str(test_size) +"\tcorrect prediction:\t" + str(correct) + "\toverall accuracy:\t" + str(overall_accuracy)
 
 
 
@@ -246,10 +269,11 @@ if __name__ == '__main__':
     #     shutil.rmtree(save_file, ignore_errors=True)
     # reduced.saveAsPickleFile(save_file)
     reduced = sc.pickleFile(save_file)
+    #processed = sc.pickleFile('./data/10k_processedRDD')
 
     #tune parameters below
-    K_percent=0.025
-    KeepAllTag = True
+    K_percent=0.005
+    KeepAllTag = False
     KNN(reduced,tags, K_percent, KeepAllTag)
 
 
