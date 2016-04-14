@@ -42,3 +42,20 @@ def dotproduct(a, b):
 
 >>> similarity = dotproduct(tfidf1, tfidf2)/(dotproduct(tfidf1, tfidf1)*dotproduct(tfidf2, tfidf2))
 ```
+
+### 04/09/16
+ - [x] new version for calculating TFIDF
+ - [x] TFIDF reduction:
+   - collecting all the corpus
+   - for each word, add all the tfidf among all the posts
+   - sort the tfidf after sum
+   - only keep top 1000 or N words with the relative higher tfidf in total
+ - [x] apply PCA after TFIDF reduction, to get 10 dimension vector representation for each post
+ - [x] speed now: (20mins) 100,000 posts --> tfidf --> "tfidf reduction to 1000 words"(newly added) --> PCA to 10 dimension
+ - [x] add the save RDD and load RDD feature
+
+## Next:
+ - [] train and test using package directly
+ - [] implement our own classifier.
+ 
+Notes: check how many tages will be in 1 million  
