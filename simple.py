@@ -18,7 +18,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, '10k_posts.txt')
+FILE0 = os.path.join(baseDir, '1000posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -244,7 +244,7 @@ def save_obj(obj, name ):
     with open('./data/'+ name + '.pkl', 'wb') as f:
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
-def load_obj(name ):
+def load_obj(name):
     with open('./data/' + name + '.pkl', 'rb') as f:
         return pickle.load(f)
 
@@ -292,6 +292,8 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     top_actual_tag_IDs = {k:v for k,v in top_actual_tag_IDs}
     print "evaluating results..."
     confution_matrix, perfomanceMatrix = get_matrixs(top_predict_tag_IDs, top_actual_tag_IDs, set(test_id))
+    save_obj(confution_matrix, '1k_confution_matrix')
+    save_obj(perfomanceMatrix, '1k_perfomanceMatrix')
     print "\ntest size:\t" + str(len(test_id)) + "\tparameter:\t" + str(K_percent) + '\t' + str(KeepAllTag)
     print "done!"
     # evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
@@ -313,7 +315,7 @@ if __name__ == '__main__':
     print "calculating tfidf ..."
     tfidf, tags = create_tfidf(sc)
     #reduced = reduce_tfidf(tfidf, 1000)
-    save_file = './data/10k_reducedRDD'
+    save_file = './data/1k_reducedRDD'
     # if os.path.exists(save_file):
     #     shutil.rmtree(save_file, ignore_errors=True)
     # reduced.saveAsPickleFile(save_file)
@@ -323,7 +325,12 @@ if __name__ == '__main__':
     #tune parameters below
     K_percent=0.005
     KeepAllTag = False
+    # you can run KNN to get the results by yourself, 1k posts in 60s, 10k posts in 20 mins.
     KNN(reduced,tags, K_percent, KeepAllTag)
+    # or... you can load the results for KNN directly, there is 1k and 10k version in ./data
+    confution_matrix = load_obj('1k_confution_matrix')
+    perfomanceMatrix = load_obj('1k_perfomanceMatrix')
+    # need some one use this data to make some figures for showing our results.
 
 
     # comment next line out, if you want to save. (note: change the path accordingly)
