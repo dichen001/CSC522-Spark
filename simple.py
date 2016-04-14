@@ -3,8 +3,10 @@ import os
 import sys
 import time
 import pickle
+import shutil
 import operator
 import numpy as np
+from operator import itemgetter
 from nltk.corpus import stopwords
 from sklearn.externals import joblib
 from nltk.stem.lancaster import LancasterStemmer
@@ -15,7 +17,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, '10k_posts.txt')
+FILE0 = os.path.join(baseDir, '1000posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -97,7 +99,7 @@ def create_tfidf(sc):
     idf = IDF(minDocFreq=2).fit(tf)
     tfidf = idf.transform(tf)
     #tfidf = tfidf.collect()
-    return tfidf
+    return tfidf, tags
 
 
 def reduce_dimention(vec, keys):
@@ -138,6 +140,38 @@ def reduce_tfidf(tfidf, dimension = 1000):
     return tfidf_reduced
 
 
+def dist(vec_id, tests):
+    result = []
+    vec1 = np.asarray(vec_id[0])
+    id1 = vec_id[1]
+    for test_id in tests:
+        vec2 = np.asarray(test_id[0])
+        id2 = test_id[1]
+        result.append([id1, id2, np.linalg.norm(vec2-vec1)])
+    result = sorted(result, key=itemgetter(2))
+    ranked_tags = [x[1] for x in result]
+    return result, ranked_tags
+
+# def dist(row, test):
+#     return np.linalg.norm(row-test)
+
+
+def return_top_tags(tags, percent):
+    #Flatten the tags E.g. -> [[java, sql, android], [swift, iphone]] will be [java, sql, android, swift, iphone]
+    flattags = tags.flatMap(lambda x: x)
+    #Generate unique tags
+    uniquetags = flattags.distinct()
+    #Generate dict of (tag, count)
+    tagcountdict = flattags.countByValue()
+    #Store (tag, count) in RDD
+    tagcountRdd = uniquetags.map(lambda x: (x, tagcountdict[x]))
+    #Select top x percent of tags
+    threshold = int(math.floor(0.01 * percent * tagcountRdd.count()))
+    toppercenttags = tagcountRdd.takeOrdered(threshold, key = lambda x: -x[1])
+    toptagsrdd = sc.parallelize(toppercenttags).map(lambda x: str(x[0]))
+    return toptagsrdd
+
+
 if __name__ == '__main__':
     conf = SparkConf()
     conf.set("spark.executor.memory", "16g")
@@ -146,10 +180,36 @@ if __name__ == '__main__':
     sc = SparkContext(conf=conf)
 
     ## ****  you can jump this part. directly load data in the next part ****** ##
-    tfidf = create_tfidf(sc)
-    reduced = reduce_tfidf(tfidf, 1000)
+    tfidf, tags = create_tfidf(sc)
+    #reduced = reduce_tfidf(tfidf, 1000)
+    save_file = './data/1k_reducedRDD'
+    # if os.path.exists(save_file):
+    #     shutil.rmtree(save_file, ignore_errors=True)
+    # reduced.saveAsPickleFile(save_file)
+    reduced = sc.pickleFile(save_file)
+    vec_id = reduced.zipWithIndex()
+    tag_id = tags.zipWithIndex()
+    top_tags = return_top_tags(tags, 1)
+
+
+    training, test = tag_id.randomSplit([0.6, 0.4], seed=0)
+    train_id = training.map(lambda x: x[1]).collect()
+    test_id = test.map(lambda x: x[1]).collect()
+    train = vec_id.filter(lambda x : x[1] in train_id)
+    test = vec_id.filter(lambda x : x[1] in test_id)
+    train_broadcast = sc.broadcast(train.collect())
+    # each row is [ [testID, trainID, distance], rankedID ]
+    dit_matrix = test.map(lambda x: dist(x, train_broadcast.value))
+    # ranked_matrix = dit_matrix.map(lambda x: )
+    tag_id_broadcast = sc.broadcast(tag_id.collect())
+    predict = dit_matrix.map(lambda x: get_tag(x[1],tag_id_broadcast.value))
+    b = dit_matrix.zipWithIndex()
+    c = b.takeOrdered(20, key = lambda x: x[0])
+    d = sc.parallelize(c)
+
+
     # comment next line out, if you want to save. (note: change the path accordingly)
-    # reduced.saveAsPickleFile('./data/10k_reducedRDD')
+    # reduced.saveAsPickleFile('./data/1k_reducedRDD')
 
     before_pca = reduced.map(lambda x: Vectors.dense(x))
     before_pca.cache()
@@ -163,7 +223,7 @@ if __name__ == '__main__':
     # haven't found a way to save PCAModel, so you need to train by yourself if you need it.
     processed = model.transform(reduced)
     # comment next line out, if you want to save. (note: change the path accordingly)
-    # processed.saveAsPickleFile('./data/10k_processedRDD')
+    processed.saveAsPickleFile('./data/1k_processedRDD')
     print 'total posts: ' + str(processed.count())
 
 
