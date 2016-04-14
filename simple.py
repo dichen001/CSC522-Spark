@@ -7,6 +7,7 @@ import shutil
 import operator
 import numpy as np
 from operator import itemgetter
+from collections import Counter
 from nltk.corpus import stopwords
 from sklearn.externals import joblib
 from nltk.stem.lancaster import LancasterStemmer
@@ -172,6 +173,38 @@ def return_top_tags(tags, percent):
     return toptagsrdd
 
 
+def get_tag(rankedIDs, tags_IDs, top = 20, KeepAllTag = True):
+    candidates = [tags_IDs[c][0] for c in rankedIDs[:top]]
+    if KeepAllTag:
+        allTags = []
+        for tags in candidates:
+            allTags.extend(tags)
+        allTagCount = Counter(allTags)
+        most_likely = allTagCount.most_common(3)
+    else:
+        keepOneTag = [tag[0] for tag in candidates ]
+        oneTagCount = Counter(keepOneTag)
+        most_likely = oneTagCount.most_common(3)
+
+    max = 0
+    predicts = []
+    for tag_count in  most_likely:
+        if tag_count[1] >= max:
+            max = tag_count[1]
+            predicts.append(tag_count[0])
+    return predicts
+
+#get_tag(dit_matrix.first()[1], tag_id_broadcast.value, 50)
+
+
+def judge(true, predict):
+    common = set(true).intersection(predict)
+    if common:
+        return 1
+    return 0
+
+
+
 if __name__ == '__main__':
     conf = SparkConf()
     conf.set("spark.executor.memory", "16g")
@@ -192,9 +225,9 @@ if __name__ == '__main__':
     top_tags = return_top_tags(tags, 1)
 
 
-    training, test = tag_id.randomSplit([0.6, 0.4], seed=0)
-    train_id = training.map(lambda x: x[1]).collect()
-    test_id = test.map(lambda x: x[1]).collect()
+    train_data, test_data = tag_id.randomSplit([0.6, 0.4], seed=0)
+    train_id = train_data.map(lambda x: x[1]).collect()
+    test_id = test_data.map(lambda x: x[1]).collect()
     train = vec_id.filter(lambda x : x[1] in train_id)
     test = vec_id.filter(lambda x : x[1] in test_id)
     train_broadcast = sc.broadcast(train.collect())
@@ -202,7 +235,13 @@ if __name__ == '__main__':
     dit_matrix = test.map(lambda x: dist(x, train_broadcast.value))
     # ranked_matrix = dit_matrix.map(lambda x: )
     tag_id_broadcast = sc.broadcast(tag_id.collect())
-    predict = dit_matrix.map(lambda x: get_tag(x[1],tag_id_broadcast.value))
+    selection = int(0.05 * tag_id.count())
+    p = get_tag(dit_matrix.first()[1], tag_id_broadcast.value,top=selection)
+    predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=selection)))
+    actual = test_data.map(lambda x: (x[1], x[0]))
+    evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
+
+
     b = dit_matrix.zipWithIndex()
     c = b.takeOrdered(20, key = lambda x: x[0])
     d = sc.parallelize(c)
