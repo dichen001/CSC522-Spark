@@ -260,16 +260,20 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     selection = int(K_percent * tag_id.count())
     predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=selection, KeepAllTag = KeepAllTag)))
     predict_TagIdPairs = predict.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
+    print "KNN Predicting tags..."
     predict_tag_IDs = predict_TagIdPairs.flatMap(lambda x: x)\
                                         .map(lambda x: (x[0], [x[1]]))\
                                         .reduceByKey(lambda x,y: x+y)
+    print "getting top_ranked predict tags..."
     top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
                                         .sortByKey(ascending=False)\
                                         .map(lambda x: [x[1][0], (x[0],x[1][1])])\
                                         .take(10)
     top_predict_tag_IDs = {k:v for k,v in top_predict_tag_IDs}
+
     actual = test_data.map(lambda x: (x[1], x[0]))
     actual_TagIdPairs = actual.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
+    print "getting top_ranked actual tags..."
     actual_tag_IDs = actual_TagIdPairs.flatMap(lambda x: x)\
                                         .map(lambda x: (x[0], [x[1]]))\
                                         .reduceByKey(lambda x,y: x+y)
@@ -278,7 +282,9 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
                                         .map(lambda x: [x[1][0], (x[0],x[1][1])])\
                                         .take(100)
     top_actual_tag_IDs = {k:v for k,v in top_actual_tag_IDs}
+    print "evaluating results..."
     confution_matrix, perfomanceMatrix = get_matrixs(top_predict_tag_IDs, top_actual_tag_IDs, set(test_id))
+    print "\ntest size:\t" + str(len(test_id)) + "\tparameter:\t" + str(K_percent) + '\t' + str(KeepAllTag)
     print "done!"
     # evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
     # correct = evaluate.map(lambda x: x[1]).reduce(lambda x,y: x+y)
@@ -296,6 +302,7 @@ if __name__ == '__main__':
     sc = SparkContext(conf=conf)
 
     ## ****  you can jump this part. directly load data in the next part ****** ##
+    print "calculating tfidf ..."
     tfidf, tags = create_tfidf(sc)
     #reduced = reduce_tfidf(tfidf, 1000)
     save_file = './data/1k_reducedRDD'
