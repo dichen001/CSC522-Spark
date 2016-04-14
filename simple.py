@@ -18,7 +18,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, '1000posts.txt')
+FILE0 = os.path.join(baseDir, '10k_posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -240,6 +240,14 @@ def get_matrixs(predict, actual, all):
     return ConfusionMatrix, PerfomanceMatrix
 
 
+def save_obj(obj, name ):
+    with open('./data/'+ name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+def load_obj(name ):
+    with open('./data/' + name + '.pkl', 'rb') as f:
+        return pickle.load(f)
+
 
 def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     vec_id = vectors.zipWithIndex()
@@ -305,7 +313,7 @@ if __name__ == '__main__':
     print "calculating tfidf ..."
     tfidf, tags = create_tfidf(sc)
     #reduced = reduce_tfidf(tfidf, 1000)
-    save_file = './data/1k_reducedRDD'
+    save_file = './data/10k_reducedRDD'
     # if os.path.exists(save_file):
     #     shutil.rmtree(save_file, ignore_errors=True)
     # reduced.saveAsPickleFile(save_file)
