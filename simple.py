@@ -209,6 +209,38 @@ def convert2tag_id_pairs(id, tags):
         pairs.append([tag, id])
     return pairs
 
+
+def get_matrixs(predict, actual, all):
+    ConfusionMatrix, PerfomanceMatrix = {}, {}
+    count = 0
+    for tag, P_count_ids in predict.iteritems():
+        A_count_ids = actual.get(tag)
+        if not A_count_ids:
+            continue
+        P_count, P_ids = P_count_ids[0], set(P_count_ids[1])
+        A_count, A_ids = A_count_ids[0], set(A_count_ids[1])
+        TP_set = P_ids & A_ids
+        TN_set = all - (P_ids | A_ids)
+        FP_set = P_ids - TP_set
+        FN_set = A_ids - TP_set
+        TP, TN, FP, FN = len(TP_set), len(TN_set), len(FP_set), len(FN_set)
+        ConfusionMatrix[tag] = {'TP': TP,
+                                'TN' : TN,
+                                'FP': FP,
+                                'FN': FN}
+        p = float(TP)/float(TP+FP) if 0 != (TP + FP) else 0
+        r = float(TP)/float(TP+FN) if 0 != (TP + FN) else 0
+        a = float(TP+TN)/float(TP+TN+FP+FN) if 0 != (TP+TN+FP+FN) else 0
+        f = 2.0*p*r/float(p+r) if 0 != (p+r) else 0
+        PerfomanceMatrix[tag] = {'precision': p,
+                                 'recall': r,
+                                 'accuracy': a,
+                                 'f-score': f}
+        print  "tag:\t" + str(tag) + "\taccuracy:\t" + str(a) + "\tprecision:\t" + str(p) + "\trecall:\t" + str(r) + "\tf-score:\t" + str(f)
+    return ConfusionMatrix, PerfomanceMatrix
+
+
+
 def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     vec_id = vectors.zipWithIndex()
     tag_id = tags.zipWithIndex()
@@ -233,8 +265,9 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
                                         .reduceByKey(lambda x,y: x+y)
     top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
                                         .sortByKey(ascending=False)\
-                                        .map(lambda x: (x[1][0],x[0],x[1][1]))\
+                                        .map(lambda x: [x[1][0], (x[0],x[1][1])])\
                                         .take(10)
+    top_predict_tag_IDs = {k:v for k,v in top_predict_tag_IDs}
     actual = test_data.map(lambda x: (x[1], x[0]))
     actual_TagIdPairs = actual.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
     actual_tag_IDs = actual_TagIdPairs.flatMap(lambda x: x)\
@@ -242,15 +275,16 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
                                         .reduceByKey(lambda x,y: x+y)
     top_actual_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
                                         .sortByKey(ascending=False)\
-                                        .map(lambda x: (x[1][0],x[0],x[1][1]))\
-                                        .take(50)
-    #confution_matrix =
-
-    evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
-    correct = evaluate.map(lambda x: x[1]).reduce(lambda x,y: x+y)
-    test_size = test_data.count()
-    overall_accuracy = float(correct)/test_size
-    print "parameter:\t" + str(K_percent) + '\t' + str(KeepAllTag) + ",\ttest size:\t" + str(test_size) +"\tcorrect prediction:\t" + str(correct) + "\toverall accuracy:\t" + str(overall_accuracy)
+                                        .map(lambda x: [x[1][0], (x[0],x[1][1])])\
+                                        .take(100)
+    top_actual_tag_IDs = {k:v for k,v in top_actual_tag_IDs}
+    confution_matrix, perfomanceMatrix = get_matrixs(top_predict_tag_IDs, top_actual_tag_IDs, set(test_id))
+    print "done!"
+    # evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
+    # correct = evaluate.map(lambda x: x[1]).reduce(lambda x,y: x+y)
+    # test_size = test_data.count()
+    # overall_accuracy = float(correct)/test_size
+    # print "parameter:\t" + str(K_percent) + '\t' + str(KeepAllTag) + ",\ttest size:\t" + str(test_size) +"\tcorrect prediction:\t" + str(correct) + "\toverall accuracy:\t" + str(overall_accuracy)
 
 
 
