@@ -203,6 +203,32 @@ def judge(true, predict):
         return 1
     return 0
 
+def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
+    vec_id = vectors.zipWithIndex()
+    tag_id = tags.zipWithIndex()
+    top_tags = return_top_tags(tags, 1)
+
+
+    train_data, test_data = tag_id.randomSplit([0.6, 0.4], seed=0)
+    train_id = train_data.map(lambda x: x[1]).collect()
+    test_id = test_data.map(lambda x: x[1]).collect()
+    train = vec_id.filter(lambda x : x[1] in train_id)
+    test = vec_id.filter(lambda x : x[1] in test_id)
+    train_broadcast = sc.broadcast(train.collect())
+    # each row is [ [testID, trainID, distance], rankedID ]
+    dit_matrix = test.map(lambda x: dist(x, train_broadcast.value))
+    # ranked_matrix = dit_matrix.map(lambda x: )
+    tag_id_broadcast = sc.broadcast(tag_id.collect())
+    selection = int(K_percent * tag_id.count())
+    #p = get_tag(dit_matrix.first()[1], tag_id_broadcast.value,top=selection)
+    predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=selection, KeepAllTag = KeepAllTag)))
+    actual = test_data.map(lambda x: (x[1], x[0]))
+    evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
+    correct = evaluate.map(lambda x: x[1]).reduce(lambda x,y: x+y)
+    test_size = test_data.count()
+    overall_accuracy = float(correct)/test_size
+    print "parameter:\t" + str(K_percent) + '\t' + str(KeepAllTag) + "test size:\t" + str(test_size) +"\tcorrect prediction:\t" + str(correct) + "\toverall accuracy:\t" + str(overall_accuracy)
+
 
 
 if __name__ == '__main__':
@@ -220,50 +246,30 @@ if __name__ == '__main__':
     #     shutil.rmtree(save_file, ignore_errors=True)
     # reduced.saveAsPickleFile(save_file)
     reduced = sc.pickleFile(save_file)
-    vec_id = reduced.zipWithIndex()
-    tag_id = tags.zipWithIndex()
-    top_tags = return_top_tags(tags, 1)
 
-
-    train_data, test_data = tag_id.randomSplit([0.6, 0.4], seed=0)
-    train_id = train_data.map(lambda x: x[1]).collect()
-    test_id = test_data.map(lambda x: x[1]).collect()
-    train = vec_id.filter(lambda x : x[1] in train_id)
-    test = vec_id.filter(lambda x : x[1] in test_id)
-    train_broadcast = sc.broadcast(train.collect())
-    # each row is [ [testID, trainID, distance], rankedID ]
-    dit_matrix = test.map(lambda x: dist(x, train_broadcast.value))
-    # ranked_matrix = dit_matrix.map(lambda x: )
-    tag_id_broadcast = sc.broadcast(tag_id.collect())
-    selection = int(0.05 * tag_id.count())
-    p = get_tag(dit_matrix.first()[1], tag_id_broadcast.value,top=selection)
-    predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=selection)))
-    actual = test_data.map(lambda x: (x[1], x[0]))
-    evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
-
-
-    b = dit_matrix.zipWithIndex()
-    c = b.takeOrdered(20, key = lambda x: x[0])
-    d = sc.parallelize(c)
+    #tune parameters below
+    K_percent=0.025
+    KeepAllTag = True
+    KNN(reduced,tags, K_percent, KeepAllTag)
 
 
     # comment next line out, if you want to save. (note: change the path accordingly)
     # reduced.saveAsPickleFile('./data/1k_reducedRDD')
-
-    before_pca = reduced.map(lambda x: Vectors.dense(x))
-    before_pca.cache()
-
-    start = time.time()
-    print "start PCA"
-    model = PCA(10).fit(before_pca)
-    end = time.time()
-    print 'time for PCA: ' + str(end - start)
-
-    # haven't found a way to save PCAModel, so you need to train by yourself if you need it.
-    processed = model.transform(reduced)
-    # comment next line out, if you want to save. (note: change the path accordingly)
-    processed.saveAsPickleFile('./data/1k_processedRDD')
-    print 'total posts: ' + str(processed.count())
+    #
+    # before_pca = reduced.map(lambda x: Vectors.dense(x))
+    # before_pca.cache()
+    #
+    # start = time.time()
+    # print "start PCA"
+    # model = PCA(10).fit(before_pca)
+    # end = time.time()
+    # print 'time for PCA: ' + str(end - start)
+    #
+    # # haven't found a way to save PCAModel, so you need to train by yourself if you need it.
+    # processed = model.transform(reduced)
+    # # comment next line out, if you want to save. (note: change the path accordingly)
+    # processed.saveAsPickleFile('./data/1k_processedRDD')
+    # print 'total posts: ' + str(processed.count())
 
 
     ## ****  you can directly load data for testing, just comment out the following lines, and change the path accordingly****** ##
