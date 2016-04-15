@@ -18,7 +18,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, '1000posts.txt')
+FILE0 = os.path.join(baseDir, '10k_posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -86,8 +86,8 @@ def vec_add(v1, v2):
 # Creates and returns a tfidf rdd from FILE0
 def create_tfidf(sc):
     # start = time.time()
-    docs = sc.textFile(FILE0, 4).map(split_docs)
-    tags = docs.map(lambda doc: doc[1].split())
+    docs = sc.textFile(FILE0, 4).map(split_docs).cache()
+    tags = docs.map(lambda doc: doc[1].split()).cache()
     tag = tags.map(lambda tags: tags[0])
     words = docs.map(lambda doc: doc[0].split())
     words = words.map(preProcess).cache()
@@ -98,7 +98,7 @@ def create_tfidf(sc):
     tf = hashingTF.transform(words)
     tf.cache()
     idf = IDF(minDocFreq=2).fit(tf)
-    tfidf = idf.transform(tf)
+    tfidf = idf.transform(tf).cache()
     #tfidf = tfidf.collect()
     return tfidf, tags
 
@@ -137,7 +137,7 @@ def reduce_tfidf(tfidf, dimension = 1000):
     # all_dict = dict(zip(all.indices, all.values))
     sorted_x = sorted(reduc.items(), key=operator.itemgetter(1))
     reduced_key = [key[0] for key in sorted_x[int(-1*dimension):]]
-    tfidf_reduced = tfidf.map(lambda x: reduce_dimention(x,reduced_key))
+    tfidf_reduced = tfidf.map(lambda x: reduce_dimention(x,reduced_key)).cache()
     return tfidf_reduced
 
 
@@ -249,7 +249,7 @@ def load_obj(name):
         return pickle.load(f)
 
 
-def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
+def KNN(vectors, tags, K=25, KeepAllTag = True):
     vec_id = vectors.zipWithIndex()
     tag_id = tags.zipWithIndex()
     top_tags = return_top_tags(tags, 1)
@@ -265,19 +265,24 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     dit_matrix = test.map(lambda x: dist(x, train_broadcast.value))
     # ranked_matrix = dit_matrix.map(lambda x: )
     tag_id_broadcast = sc.broadcast(tag_id.collect())
-    selection = int(K_percent * tag_id.count())
-    predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=selection, KeepAllTag = KeepAllTag)))
+    #selection = int(K_percent * tag_id.count())
+    predict = dit_matrix.map(lambda x: (x[0][0][0], get_tag(x[1], tag_id_broadcast.value, top=K, KeepAllTag = KeepAllTag)))
     predict_TagIdPairs = predict.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
     print "KNN Predicting tags..."
     predict_tag_IDs = predict_TagIdPairs.flatMap(lambda x: x)\
                                         .map(lambda x: (x[0], [x[1]]))\
                                         .reduceByKey(lambda x,y: x+y)
     print "getting top_ranked predict tags..."
-    top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
-                                        .sortByKey(ascending=False)\
-                                        .map(lambda x: [x[1][0], (x[0],x[1][1])])\
-                                        .take(10)
-    top_predict_tag_IDs = {k:v for k,v in top_predict_tag_IDs}
+    # top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
+    #                                     .sortByKey(ascending=False)\
+    #                                     .map(lambda x: [x[1][0], (x[0],x[1][1])])\
+    #                                     .take(10)
+    # top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
+    #                                     .takeOrdered(10, key = lambda x: -x[0])
+    predict_count_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1]))).collect()
+    predict_count_tag_IDs_sorted = sorted(predict_count_tag_IDs, key=lambda x: -x[0])
+    top_predict_tag_IDs = predict_count_tag_IDs_sorted[0:10]
+    top_predict_tag_IDs = {tag_ids[0]: (count, tag_ids[1]) for count, tag_ids in top_predict_tag_IDs}
 
     actual = test_data.map(lambda x: (x[1], x[0]))
     actual_TagIdPairs = actual.map(lambda x: convert2tag_id_pairs(x[0],x[1]))
@@ -285,16 +290,23 @@ def KNN(vectors, tags, K_percent=0.025, KeepAllTag = True):
     actual_tag_IDs = actual_TagIdPairs.flatMap(lambda x: x)\
                                         .map(lambda x: (x[0], [x[1]]))\
                                         .reduceByKey(lambda x,y: x+y)
-    top_actual_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
-                                        .sortByKey(ascending=False)\
-                                        .map(lambda x: [x[1][0], (x[0],x[1][1])])\
-                                        .take(100)
-    top_actual_tag_IDs = {k:v for k,v in top_actual_tag_IDs}
+    tag_count = actual_tag_IDs.count()
+    print "TOTAL TAGS: " + str(tag_count)
+    # top_actual_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
+    #                                     .sortByKey(ascending=False)\
+    #                                     .map(lambda x: [x[1][0], (x[0],x[1][1])])\
+    #                                     .take(100)
+    # top_actual_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
+    #                                     .takeOrdered(100, key = lambda x: -x[0])
+    actual_count_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1]))).collect()
+    actual_count_tag_IDs_sorted = sorted(actual_count_tag_IDs, key=lambda x: -x[0])
+    top_actual_tag_IDs = actual_count_tag_IDs_sorted[0:50]
+    top_actual_tag_IDs = {tag_ids[0]: (count, tag_ids[1]) for count, tag_ids in actual_count_tag_IDs}
     print "evaluating results..."
     confution_matrix, perfomanceMatrix = get_matrixs(top_predict_tag_IDs, top_actual_tag_IDs, set(test_id))
-    save_obj(confution_matrix, '1k_confution_matrix')
-    save_obj(perfomanceMatrix, '1k_perfomanceMatrix')
-    print "\ntest size:\t" + str(len(test_id)) + "\tparameter:\t" + str(K_percent) + '\t' + str(KeepAllTag)
+    save_obj(confution_matrix, '10k_confution_matrix')
+    save_obj(perfomanceMatrix, '10k_perfomanceMatrix')
+    print "\ntest size:\t" + str(len(test_id)) + "\ttotal tags:\t" + str(tag_count) + "\tparameter:\t K=" + str(K) + '\t' + str(KeepAllTag)
     print "done!"
     # evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
     # correct = evaluate.map(lambda x: x[1]).reduce(lambda x,y: x+y)
@@ -314,22 +326,29 @@ if __name__ == '__main__':
     ## ****  you can jump this part. directly load data in the next part ****** ##
     print "calculating tfidf ..."
     tfidf, tags = create_tfidf(sc)
-    #reduced = reduce_tfidf(tfidf, 1000)
-    save_file = './data/1k_reducedRDD'
+    dimention = 1000
+    print "reducing tfidf to " + str(dimention) + "..."
+
+    save_file = './data/10k_reducedRDD'
+    # just this if you want to load reduced directly in the following section.
+    # reduced = reduce_tfidf(tfidf, dimention)
+    # # use below to save the reduce tfidf RDD
     # if os.path.exists(save_file):
     #     shutil.rmtree(save_file, ignore_errors=True)
     # reduced.saveAsPickleFile(save_file)
+
+    # use below to load reduced tfidf RDD directly.
     reduced = sc.pickleFile(save_file)
-    #processed = sc.pickleFile('./data/10k_processedRDD')
+    # processed = sc.pickleFile('./data/10k_processedRDD')
 
     #tune parameters below
-    K_percent=0.005
+    K = 50
     KeepAllTag = False
     # you can run KNN to get the results by yourself, 1k posts in 60s, 10k posts in 20 mins.
-    KNN(reduced,tags, K_percent, KeepAllTag)
+    KNN(reduced,tags, K, KeepAllTag)
     # or... you can load the results for KNN directly, there is 1k and 10k version in ./data
-    confution_matrix = load_obj('1k_confution_matrix')
-    perfomanceMatrix = load_obj('1k_perfomanceMatrix')
+    confution_matrix = load_obj('10k_confution_matrix')
+    perfomanceMatrix = load_obj('10k_perfomanceMatrix')
     # need some one use this data to make some figures for showing our results.
 
 
