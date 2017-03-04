@@ -18,7 +18,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, '10k_posts.txt')
+FILE0 = os.path.join(baseDir, '2k_posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -272,7 +272,7 @@ def KNN(vectors, tags, K=25, KeepAllTag = True):
     predict_tag_IDs = predict_TagIdPairs.flatMap(lambda x: x)\
                                         .map(lambda x: (x[0], [x[1]]))\
                                         .reduceByKey(lambda x,y: x+y)
-    print "getting top_ranked predict tags..."
+    print "collecting tags predicted..."
     # top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
     #                                     .sortByKey(ascending=False)\
     #                                     .map(lambda x: [x[1][0], (x[0],x[1][1])])\
@@ -280,8 +280,9 @@ def KNN(vectors, tags, K=25, KeepAllTag = True):
     # top_predict_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
     #                                     .takeOrdered(10, key = lambda x: -x[0])
     predict_count_tag_IDs = predict_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1]))).collect()
+    print "sorting predict tags..."
     predict_count_tag_IDs_sorted = sorted(predict_count_tag_IDs, key=lambda x: -x[0])
-    top_predict_tag_IDs = predict_count_tag_IDs_sorted[0:10]
+    top_predict_tag_IDs = predict_count_tag_IDs_sorted[0:20]
     top_predict_tag_IDs = {tag_ids[0]: (count, tag_ids[1]) for count, tag_ids in top_predict_tag_IDs}
 
     actual = test_data.map(lambda x: (x[1], x[0]))
@@ -299,13 +300,14 @@ def KNN(vectors, tags, K=25, KeepAllTag = True):
     # top_actual_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1])))\
     #                                     .takeOrdered(100, key = lambda x: -x[0])
     actual_count_tag_IDs = actual_tag_IDs.map(lambda x: (len(x[1]),(x[0], x[1]))).collect()
+    print "sorting actual tags"
     actual_count_tag_IDs_sorted = sorted(actual_count_tag_IDs, key=lambda x: -x[0])
     top_actual_tag_IDs = actual_count_tag_IDs_sorted[0:50]
     top_actual_tag_IDs = {tag_ids[0]: (count, tag_ids[1]) for count, tag_ids in actual_count_tag_IDs}
     print "evaluating results..."
     confution_matrix, perfomanceMatrix = get_matrixs(top_predict_tag_IDs, top_actual_tag_IDs, set(test_id))
-    save_obj(confution_matrix, '10k_confution_matrix')
-    save_obj(perfomanceMatrix, '10k_perfomanceMatrix')
+    save_obj(confution_matrix, '2k_confution_matrix')
+    save_obj(perfomanceMatrix, '2k_perfomanceMatrix')
     print "\ntest size:\t" + str(len(test_id)) + "\ttotal tags:\t" + str(tag_count) + "\tparameter:\t K=" + str(K) + '\t' + str(KeepAllTag)
     print "done!"
     # evaluate = actual.join(predict).map(lambda x: (x[0], judge(x[1][0], x[1][1])))
@@ -324,13 +326,13 @@ if __name__ == '__main__':
     sc = SparkContext(conf=conf)
 
     ## ****  you can jump this part. directly load data in the next part ****** ##
-    print "calculating tfidf ..."
+    # print "calculating tfidf ..."
     tfidf, tags = create_tfidf(sc)
     dimention = 1000
     print "reducing tfidf to " + str(dimention) + "..."
 
-    save_file = './data/10k_reducedRDD'
-    # just this if you want to load reduced directly in the following section.
+    save_file = './data/2k_reducedRDD'
+    #just this if you want to load reduced directly in the following section.
     # reduced = reduce_tfidf(tfidf, dimention)
     # # use below to save the reduce tfidf RDD
     # if os.path.exists(save_file):
@@ -342,13 +344,13 @@ if __name__ == '__main__':
     # processed = sc.pickleFile('./data/10k_processedRDD')
 
     #tune parameters below
-    K = 50
-    KeepAllTag = False
+    K = 10
+    KeepAllTag = True
     # you can run KNN to get the results by yourself, 1k posts in 60s, 10k posts in 20 mins.
-    KNN(reduced,tags, K, KeepAllTag)
+    KNN(reduced, tags, K, KeepAllTag)
     # or... you can load the results for KNN directly, there is 1k and 10k version in ./data
-    confution_matrix = load_obj('10k_confution_matrix')
-    perfomanceMatrix = load_obj('10k_perfomanceMatrix')
+    confution_matrix = load_obj('2k_confution_matrix')
+    perfomanceMatrix = load_obj('2k_perfomanceMatrix')
     # need some one use this data to make some figures for showing our results.
 
 

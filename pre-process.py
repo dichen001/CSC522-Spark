@@ -11,7 +11,7 @@ st = LancasterStemmer()
 stopwords = stopwords.words('english')
 
 baseDir = os.path.join('data')
-FILE0 = os.path.join(baseDir, 'xaa')
+FILE0 = os.path.join(baseDir, '1000posts.txt')
 
 """
 Set up the Spark and PySpark Environment for PyCharm
@@ -180,7 +180,7 @@ def uniform_tfidf_rep(words, total_copurs):
 
 # Creates and returns a tfidf rdd from FILE0
 def create_tfidf(sc):
-    start = time.time()
+    # start = time.time()
 
 
     docs = sc.textFile(FILE0, 4).map(split_docs)
@@ -234,9 +234,15 @@ def create_tfidf(sc):
 
 
 if __name__ == '__main__':
-    sc = SparkContext('local')
+    conf = SparkConf()
+    conf.set("spark.executor.memory", "16g")
+    conf.set("spark.driver.memory","16g")
+    conf.set("spark.driver.maxResultSize","16g")
+    sc = SparkContext(conf=conf)
     tfidf_matrix = create_tfidf(sc)
     tfidf_dVector_matrix = tfidf_matrix.map(lambda row: Vectors.dense(row))
-    reduc = PCA(3).fit(tfidf_dVector_matrix)
-    after_pca = reduc.transform(tfidf_dVector_matrix)
-
+    start2 = time.time()
+    model = PCA(20).fit(tfidf_dVector_matrix)
+    end2 = time.time()
+    print (end2 - start2)
+    after_pca = model.transform(tfidf_dVector_matrix).collect
